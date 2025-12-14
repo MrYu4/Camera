@@ -41,7 +41,6 @@ import AVKit
         self.frontCameraInput = CDI.get(mediaType: .video, position: .front)
         self.backCameraInput = CDI.get(mediaType: .video, position: .back)
         super.init()
-        print("🎥 [CameraManager] Initialized with address: \(Unmanaged.passUnretained(self).toOpaque())")
     }
 }
 
@@ -71,8 +70,6 @@ extension CameraManager {
 }
 private extension CameraManager {
     func setupCameraLayer() {
-        captureSession.sessionPreset = attributes.resolution
-
         cameraLayer.session = captureSession as? AVCaptureSession
         cameraLayer.videoGravity = .resizeAspectFill
         cameraLayer.isHidden = true
@@ -81,6 +78,9 @@ private extension CameraManager {
     func setupDeviceInputs() throws(MCameraError) {
         try captureSession.add(input: getCameraInput())
         if let audioInput = getAudioInput() { try captureSession.add(input: audioInput) }
+        
+        // 在添加输入后设置 preset，以便设备能报告正确的缩放范围
+        captureSession.sessionPreset = attributes.resolution
     }
     func setupDeviceOutput() throws(MCameraError) {
         try photoOutput.setup(parent: self)
@@ -119,7 +119,12 @@ private extension CameraManager {
         device.setExposureMode(attributes.cameraExposure.mode, duration: attributes.cameraExposure.duration, iso: attributes.cameraExposure.iso)
         device.setExposureTargetBias(attributes.cameraExposure.targetBias)
         device.setFrameRate(attributes.frameRate)
-        device.setZoomFactor(attributes.zoomFactor)
+        
+        // 将 UI 缩放值转换为 API 缩放值
+        let zoomMultiplier = deviceHasUltraWideCamera(device) ? 0.5 : 1.0
+        let apiZoomFactor = attributes.zoomFactor / zoomMultiplier
+        device.setZoomFactor(apiZoomFactor)
+        
         device.setLightMode(attributes.lightMode)
         device.hdrMode = attributes.hdrMode
         device.unlockForConfiguration()
@@ -193,32 +198,33 @@ private extension CameraManager {
 // MARK: Set Camera Zoom
 extension CameraManager {
     func setCameraZoomFactor(_ zoomFactor: CGFloat) throws {
-        print("🔍 [setCameraZoomFactor] Called with zoom: \(zoomFactor)")
-        print("🔍 [setCameraZoomFactor] Self address: \(Unmanaged.passUnretained(self).toOpaque())")
-        print("🔍 [setCameraZoomFactor] Current attributes.zoomFactor: \(attributes.zoomFactor)")
+        guard let device = getCameraInput()?.device else { return }
         
-        guard let device = getCameraInput()?.device else {
-            print("⚠️ [setCameraZoomFactor] No device available")
-            return
-        }
+        // 计算缩放乘数：如果有超广角，UI 上的 0.5x 对应 API 的 1.0
+        let zoomMultiplier = deviceHasUltraWideCamera(device) ? 0.5 : 1.0
         
-        guard zoomFactor != attributes.zoomFactor else {
-            print("⚠️ [setCameraZoomFactor] Same zoom value, skipping")
-            return
-        }
+        // 将 UI 缩放值转换为 API 缩放值
+        let apiZoomFactor = zoomFactor / zoomMultiplier
         
-        guard !isChanging else {
-            print("⚠️ [setCameraZoomFactor] Camera is changing, skipping")
-            return
-        }
+        guard apiZoomFactor != device.videoZoomFactor else { return }
+        guard !isChanging else { return }
 
-        print("🔍 [setCameraZoomFactor] Before setDeviceZoomFactor")
-        try setDeviceZoomFactor(zoomFactor, device)
-        print("🔍 [setCameraZoomFactor] After setDeviceZoomFactor, device.videoZoomFactor: \(device.videoZoomFactor)")
+        try setDeviceZoomFactor(apiZoomFactor, device)
         
-        attributes.zoomFactor = device.videoZoomFactor
-        print("🔍 [setCameraZoomFactor] Updated attributes.zoomFactor to: \(attributes.zoomFactor)")
-        print("🔍 [setCameraZoomFactor] Self address after: \(Unmanaged.passUnretained(self).toOpaque())")
+        // 保存 UI 缩放值
+        attributes.zoomFactor = device.videoZoomFactor * zoomMultiplier
+    }
+    
+    private func deviceHasUltraWideCamera(_ device: CaptureDevice) -> Bool {
+        // 检查是否为虚拟设备且包含超广角
+        if let avDevice = device as? AVCaptureDevice, avDevice.isVirtualDevice {
+            return avDevice.constituentDevices.contains { $0.deviceType == .builtInUltraWideCamera }
+        }
+        // 检查是否本身就是超广角
+        if let avDevice = device as? AVCaptureDevice {
+            return avDevice.deviceType == .builtInUltraWideCamera
+        }
+        return false
     }
 }
 private extension CameraManager {
@@ -432,8 +438,8 @@ extension CameraManager {
     func resetAttributes(device: (any CaptureDevice)?) {
         guard let device else { return }
 
-        print("🔄 [resetAttributes] Called, self: \(Unmanaged.passUnretained(self).toOpaque())")
-        print("🔄 [resetAttributes] Old zoomFactor: \(attributes.zoomFactor)")
+        // 计算缩放乘数：如果有超广角，UI 上的 0.5x 对应 API 的 1.0
+        let zoomMultiplier = deviceHasUltraWideCamera(device) ? 0.5 : 1.0
         
         var newAttributes = attributes
         newAttributes.cameraExposure.mode = device.exposureMode
@@ -441,12 +447,12 @@ extension CameraManager {
         newAttributes.cameraExposure.iso = device.iso
         newAttributes.cameraExposure.targetBias = device.exposureTargetBias
         newAttributes.frameRate = device.activeVideoMaxFrameDuration.timescale
-        newAttributes.zoomFactor = device.videoZoomFactor
+        // 将 API 缩放值转换为 UI 缩放值
+        newAttributes.zoomFactor = device.videoZoomFactor * zoomMultiplier
         newAttributes.lightMode = device.lightMode
         newAttributes.hdrMode = device.hdrMode
 
         attributes = newAttributes
-        print("🔄 [resetAttributes] New zoomFactor: \(attributes.zoomFactor)")
     }
     func getCameraInput(_ position: CameraPosition? = nil) -> (any CaptureDeviceInput)? { switch position ?? attributes.cameraPosition {
         case .front: frontCameraInput
