@@ -10,6 +10,7 @@
 
 
 import SwiftUI
+import AVKit
 
 /**
  A view that displays a camera with state-specific screens.
@@ -91,13 +92,25 @@ import SwiftUI
  ```
  */
 public struct MCamera: View {
-    @ObservedObject var manager: CameraManager
+    @StateObject var manager: CameraManager
     @Namespace var namespace
     var config: Config = .init()
+
+    public init() {
+        // @StateObject 必须使用 _propertyName 语法初始化
+        _manager = StateObject(wrappedValue: CameraManager(
+            captureSession: AVCaptureSession(),
+            captureDeviceInputType: AVCaptureDeviceInput.self
+        ))
+    }
 
     
     public var body: some View { if config.isCameraConfigured {
         ZStack(content: createContent)
+            .onAppear {
+                // 在 View 安装后应用初始配置
+                config.initialConfigurationBlock?(manager)
+            }
             .onDisappear(perform: onDisappear)
             .onChange(of: manager.attributes.capturedMedia, perform: onCapturedMediaChange)
     }}

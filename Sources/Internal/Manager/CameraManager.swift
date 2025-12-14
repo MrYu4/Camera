@@ -40,6 +40,8 @@ import AVKit
         self.captureSession = captureSession
         self.frontCameraInput = CDI.get(mediaType: .video, position: .front)
         self.backCameraInput = CDI.get(mediaType: .video, position: .back)
+        super.init()
+        print("🎥 [CameraManager] Initialized with address: \(Unmanaged.passUnretained(self).toOpaque())")
     }
 }
 
@@ -191,10 +193,32 @@ private extension CameraManager {
 // MARK: Set Camera Zoom
 extension CameraManager {
     func setCameraZoomFactor(_ zoomFactor: CGFloat) throws {
-        guard let device = getCameraInput()?.device, zoomFactor != attributes.zoomFactor, !isChanging else { return }
+        print("🔍 [setCameraZoomFactor] Called with zoom: \(zoomFactor)")
+        print("🔍 [setCameraZoomFactor] Self address: \(Unmanaged.passUnretained(self).toOpaque())")
+        print("🔍 [setCameraZoomFactor] Current attributes.zoomFactor: \(attributes.zoomFactor)")
+        
+        guard let device = getCameraInput()?.device else {
+            print("⚠️ [setCameraZoomFactor] No device available")
+            return
+        }
+        
+        guard zoomFactor != attributes.zoomFactor else {
+            print("⚠️ [setCameraZoomFactor] Same zoom value, skipping")
+            return
+        }
+        
+        guard !isChanging else {
+            print("⚠️ [setCameraZoomFactor] Camera is changing, skipping")
+            return
+        }
 
+        print("🔍 [setCameraZoomFactor] Before setDeviceZoomFactor")
         try setDeviceZoomFactor(zoomFactor, device)
+        print("🔍 [setCameraZoomFactor] After setDeviceZoomFactor, device.videoZoomFactor: \(device.videoZoomFactor)")
+        
         attributes.zoomFactor = device.videoZoomFactor
+        print("🔍 [setCameraZoomFactor] Updated attributes.zoomFactor to: \(attributes.zoomFactor)")
+        print("🔍 [setCameraZoomFactor] Self address after: \(Unmanaged.passUnretained(self).toOpaque())")
     }
 }
 private extension CameraManager {
@@ -408,6 +432,9 @@ extension CameraManager {
     func resetAttributes(device: (any CaptureDevice)?) {
         guard let device else { return }
 
+        print("🔄 [resetAttributes] Called, self: \(Unmanaged.passUnretained(self).toOpaque())")
+        print("🔄 [resetAttributes] Old zoomFactor: \(attributes.zoomFactor)")
+        
         var newAttributes = attributes
         newAttributes.cameraExposure.mode = device.exposureMode
         newAttributes.cameraExposure.duration = device.exposureDuration
@@ -419,6 +446,7 @@ extension CameraManager {
         newAttributes.hdrMode = device.hdrMode
 
         attributes = newAttributes
+        print("🔄 [resetAttributes] New zoomFactor: \(attributes.zoomFactor)")
     }
     func getCameraInput(_ position: CameraPosition? = nil) -> (any CaptureDeviceInput)? { switch position ?? attributes.cameraPosition {
         case .front: frontCameraInput

@@ -25,4 +25,7 @@ extension MCamera { @MainActor class Config {
     // MARK: Others
     var appDelegate: MApplicationDelegate.Type? = nil
     var isCameraConfigured: Bool = false
+    
+    // MARK: Initial Configuration
+    var initialConfigurationBlock: ((CameraManager) -> Void)? = nil
 }}
