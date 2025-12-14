@@ -19,6 +19,7 @@ import AVKit
     private(set) var commandQueue: MTLCommandQueue!
     private(set) var currentFrame: CIImage?
     private(set) var focusIndicator: CameraFocusIndicatorView = .init()
+    private(set) var brightnessSlider: CameraBrightnessSliderView = .init()
     private(set) var isAnimating: Bool = false
 }
 
@@ -143,17 +144,64 @@ extension CameraMetalView {
         let focusIndicator = focusIndicator.create(at: touchPoint)
         parent.cameraView.addSubview(focusIndicator)
         animateFocusIndicator(focusIndicator)
+        
+        // 添加亮度滑块（紧贴对焦图标右侧）
+        if brightnessSlider.enabled {
+            let sliderView = brightnessSlider.create(at: touchPoint, focusIndicatorSize: self.focusIndicator.size, parent: parent, metalView: self)
+            parent.cameraView.addSubview(sliderView)
+            animateBrightnessSlider(sliderView)
+            try? parent.setExposureTargetBias(0)
+        }
+    }
+    
+    func scheduleFadeOut(for view: UIView) {
+        UIView.animate(withDuration: 0.44, delay: 1.44, animations: { 
+            view.alpha = 0.2 
+        }) { _ in
+            UIView.animate(withDuration: 0.44, delay: 1.44, animations: { 
+                view.alpha = 0 
+            })
+        }
+    }
+    
+    func cancelFadeOutAndKeepVisible() {
+        // 取消所有淡出动画并恢复完全可见
+        if let focusView = parent.cameraView.viewWithTag(.focusIndicatorTag) {
+            focusView.layer.removeAllAnimations()
+            UIView.animate(withDuration: 0.2) {
+                focusView.alpha = 1.0
+            }
+        }
+        if let sliderView = parent.cameraView.viewWithTag(.brightnessSliderTag) {
+            sliderView.layer.removeAllAnimations()
+            UIView.animate(withDuration: 0.2) {
+                sliderView.alpha = 1.0
+            }
+        }
     }
 }
 private extension CameraMetalView {
-    func removeExistingFocusIndicatorAnimations() { if let view = parent.cameraView.viewWithTag(.focusIndicatorTag) {
-        view.removeFromSuperview()
-    }}
+    func removeExistingFocusIndicatorAnimations() { 
+        if let view = parent.cameraView.viewWithTag(.focusIndicatorTag) {
+            view.removeFromSuperview()
+        }
+        if let view = parent.cameraView.viewWithTag(.brightnessSliderTag) {
+            view.removeFromSuperview()
+        }
+    }
     func animateFocusIndicator(_ focusIndicator: UIImageView) {
         UIView.animate(withDuration: 0.44, delay: 0, usingSpringWithDamping: 0.6, initialSpringVelocity: 0, animations: { focusIndicator.transform = .init(scaleX: 1, y: 1) }) { _ in
-            UIView.animate(withDuration: 0.44, delay: 1.44, animations: { focusIndicator.alpha = 0.2 }) { _ in
-                UIView.animate(withDuration: 0.44, delay: 1.44, animations: { focusIndicator.alpha = 0 })
-            }
+            self.scheduleFadeOut(for: focusIndicator)
+        }
+    }
+    func animateBrightnessSlider(_ sliderView: UIView) {
+        sliderView.isUserInteractionEnabled = true
+        UIView.animate(withDuration: 0.44, delay: 0, usingSpringWithDamping: 0.6, initialSpringVelocity: 0, animations: { 
+            sliderView.transform = .init(scaleX: 1, y: 1)
+            sliderView.alpha = 1
+        }) { _ in
+            sliderView.isUserInteractionEnabled = true
+            self.scheduleFadeOut(for: sliderView)
         }
     }
 }
