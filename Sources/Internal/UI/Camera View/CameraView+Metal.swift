@@ -150,6 +150,8 @@ extension CameraMetalView {
             let sliderView = brightnessSlider.create(at: touchPoint, focusIndicatorSize: self.focusIndicator.size, parent: parent, metalView: self)
             parent.cameraView.addSubview(sliderView)
             animateBrightnessSlider(sliderView)
+            
+            // 重置曝光值到0
             try? parent.setExposureTargetBias(0)
         }
     }
@@ -168,15 +170,11 @@ extension CameraMetalView {
         // 取消所有淡出动画并恢复完全可见
         if let focusView = parent.cameraView.viewWithTag(.focusIndicatorTag) {
             focusView.layer.removeAllAnimations()
-            UIView.animate(withDuration: 0.2) {
-                focusView.alpha = 1.0
-            }
+            focusView.alpha = 1.0
         }
         if let sliderView = parent.cameraView.viewWithTag(.brightnessSliderTag) {
             sliderView.layer.removeAllAnimations()
-            UIView.animate(withDuration: 0.2) {
-                sliderView.alpha = 1.0
-            }
+            sliderView.alpha = 1.0
         }
     }
 }

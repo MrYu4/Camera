@@ -28,7 +28,11 @@ extension CameraBrightnessSliderView {
         containerView.transform = .init(scaleX: 0, y: 0)
         containerView.cameraManager = parent
         containerView.metalView = metalView
-        containerView.initialValue = parent.attributes.cameraExposure.targetBias
+        
+        // 每次创建时重置曝光值为0
+        containerView.initialValue = 0.0
+        containerView.currentValue = 0.0
+        
         containerView.isUserInteractionEnabled = true
         containerView.isMultipleTouchEnabled = false
         containerView.isExclusiveTouch = true
@@ -46,6 +50,11 @@ private class BrightnessControlView: UIView {
     private let sunIconSize: CGFloat = 16
     private var startTouchY: CGFloat = 0
     private var startValue: Float = 0
+    var currentValue: Float = 0.0 {
+        didSet {
+            setNeedsDisplay() // 值改变时重绘
+        }
+    }
     
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -77,24 +86,42 @@ private class BrightnessControlView: UIView {
         guard let context = UIGraphicsGetCurrentContext() else { return }
         
         let centerX = rect.width / 2
-        let centerY = rect.height / 2
         
-        // 上方竖线
+        // 添加边距，防止太阳图标在极点时被遮挡
+        let topMargin: CGFloat = sunIconSize / 2 + 2
+        let bottomMargin: CGFloat = sunIconSize / 2 + 2
+        let availableHeight = rect.height - topMargin - bottomMargin
+        
+        // 将曝光值 (-3.0 到 3.0) 映射到 Y 坐标，考虑边距
+        // 曝光值 3.0 -> 顶部边距, 0.0 -> 中间, -3.0 -> 底部边距
+        let minExposure: Float = -3.0
+        let maxExposure: Float = 3.0
+        let normalizedValue = (currentValue - minExposure) / (maxExposure - minExposure) // 0.0 到 1.0
+        let sunCenterY = topMargin + availableHeight * CGFloat(1.0 - normalizedValue) // 反转，因为 Y 坐标向下增加
+        
+        // 绘制竖线样式
         context.setStrokeColor(UIColor.white.withAlphaComponent(0.8).cgColor)
         context.setLineWidth(lineWidth)
         context.setLineCap(.round)
-        context.move(to: CGPoint(x: centerX, y: 0))
-        context.addLine(to: CGPoint(x: centerX, y: centerY - sunIconSize / 2 - 4))
-        context.strokePath()
         
-        // 下方竖线
-        context.move(to: CGPoint(x: centerX, y: centerY + sunIconSize / 2 + 4))
-        context.addLine(to: CGPoint(x: centerX, y: rect.height))
-        context.strokePath()
+        // 上方竖线（从顶部到太阳图标上方）
+        let lineGap: CGFloat = 4
+        if sunCenterY - sunIconSize / 2 - lineGap > 0 {
+            context.move(to: CGPoint(x: centerX, y: 0))
+            context.addLine(to: CGPoint(x: centerX, y: sunCenterY - sunIconSize / 2 - lineGap))
+            context.strokePath()
+        }
         
-        // 中间太阳图标
+        // 下方竖线（从太阳图标下方到底部）
+        if sunCenterY + sunIconSize / 2 + lineGap < rect.height {
+            context.move(to: CGPoint(x: centerX, y: sunCenterY + sunIconSize / 2 + lineGap))
+            context.addLine(to: CGPoint(x: centerX, y: rect.height))
+            context.strokePath()
+        }
+        
+        // 中间太阳图标（位置根据曝光值变化）
         let sunRect = CGRect(x: centerX - sunIconSize / 2, 
-                            y: centerY - sunIconSize / 2,
+                            y: sunCenterY - sunIconSize / 2,
                             width: sunIconSize, 
                             height: sunIconSize)
         
@@ -109,7 +136,9 @@ private class BrightnessControlView: UIView {
         super.touchesBegan(touches, with: event)
         guard let touch = touches.first else { return }
         startTouchY = touch.location(in: self).y
-        startValue = cameraManager?.attributes.cameraExposure.targetBias ?? 0.0
+        // 使用滑块当前显示的值作为起始值，而不是相机的曝光值
+        // 这样可以确保滑动速度一致，不会因为相机曝光值和显示值不同步而出现跳跃
+        startValue = currentValue
         
         // 取消淡出动画，保持显示
         metalView?.cancelFadeOutAndKeepVisible()
@@ -121,14 +150,16 @@ private class BrightnessControlView: UIView {
         let currentY = touch.location(in: self).y
         let deltaY = startTouchY - currentY  // 向上为正
         
-        // 每移动 20pt 改变 1.0 曝光值
-        let sensitivity: Float = 0.05
+        // 进一步降低灵敏度：需要滑动整个滑块高度(92pt)才能改变约1.5曝光值
+        // 这样从-3到+3需要滑动约4倍滑块高度，提供更精细的控制
+        let sensitivity: Float = 0.016
         let deltaValue = Float(deltaY) * sensitivity
         var newValue = startValue + deltaValue
         
         // 限制范围 -3.0 到 3.0
         newValue = max(-3.0, min(3.0, newValue))
         
+        currentValue = newValue // 更新当前值，触发重绘
         try? cameraManager?.setExposureTargetBias(newValue)
         metalView?.cancelFadeOutAndKeepVisible()
     }
