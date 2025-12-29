@@ -58,10 +58,20 @@ protocol CaptureDevice: NSObject {
 
 // MARK: Set Zoom Factor
 extension CaptureDevice {
-    func setZoomFactor(_ factor: CGFloat) {
+    func setZoomFactor(_ factor: CGFloat, customMaxZoom: CGFloat? = nil) {
         // 获取设备支持的缩放范围
         let minZoom = minAvailableVideoZoomFactor
-        let maxZoom = maxAvailableVideoZoomFactor
+        var maxZoom = maxAvailableVideoZoomFactor
+
+        // 如果是 AVCaptureDevice，优先使用当前格式支持的最大缩放倍数
+        if let device = self as? AVCaptureDevice {
+            maxZoom = device.activeFormat.videoMaxZoomFactor
+        }
+        
+        // 如果用户设置了自定义最大缩放倍率，使用较小的那个值
+        if let customMax = customMaxZoom {
+            maxZoom = min(maxZoom, customMax)
+        }
         
         // 安全检查：确保范围有效
         guard minZoom > 0, maxZoom >= minZoom else { return }

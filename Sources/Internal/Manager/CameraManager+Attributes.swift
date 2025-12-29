@@ -19,6 +19,7 @@ struct CameraManagerAttributes {
     var cameraPosition: CameraPosition = .back
     var isAudioSourceAvailable: Bool = false
     var zoomFactor: CGFloat = 1.0
+    var maxZoomFactor: CGFloat? = nil
     var flashMode: CameraFlashMode = .off
     var lightMode: CameraLightMode = .off
     var resolution: AVCaptureSession.Preset = .hd1920x1080

@@ -28,4 +28,7 @@ extension MCamera { @MainActor class Config {
     
     // MARK: Initial Configuration
     var initialConfigurationBlock: ((CameraManager) -> Void)? = nil
+    
+    // MARK: Zoom Change Callback
+    var onZoomChanged: ((CGFloat) -> Void)? = nil
 }}

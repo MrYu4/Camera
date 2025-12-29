@@ -110,6 +110,7 @@ public struct MCamera: View {
             .onAppear {
                 // 在 View 安装后应用初始配置
                 config.initialConfigurationBlock?(manager)
+                manager.onZoomChanged = config.onZoomChanged
             }
             .onDisappear(perform: onDisappear)
             .onChange(of: manager.attributes.capturedMedia, perform: onCapturedMediaChange)

@@ -14,6 +14,7 @@ import AVKit
 
 @MainActor public class CameraManager: NSObject, ObservableObject {
     @Published var attributes: CameraManagerAttributes = .init()
+    var onZoomChanged: ((CGFloat) -> Void)?
 
     // MARK: Input
     private(set) var captureSession: any CaptureSession
@@ -121,9 +122,10 @@ private extension CameraManager {
         device.setFrameRate(attributes.frameRate)
         
         // 将 UI 缩放值转换为 API 缩放值
-        let zoomMultiplier = deviceHasUltraWideCamera(device) ? 0.5 : 1.0
+        let zoomMultiplier: CGFloat = deviceHasUltraWideCamera(device) ? 0.5 : 1.0
         let apiZoomFactor = attributes.zoomFactor / zoomMultiplier
-        device.setZoomFactor(apiZoomFactor)
+        let customMaxZoom = attributes.maxZoomFactor.map { $0 / zoomMultiplier }
+        device.setZoomFactor(apiZoomFactor, customMaxZoom: customMaxZoom)
         
         device.setLightMode(attributes.lightMode)
         device.hdrMode = attributes.hdrMode
@@ -230,7 +232,9 @@ extension CameraManager {
 private extension CameraManager {
     func setDeviceZoomFactor(_ zoomFactor: CGFloat, _ device: any CaptureDevice) throws {
         try device.lockForConfiguration()
-        device.setZoomFactor(zoomFactor)
+        let zoomMultiplier: CGFloat = deviceHasUltraWideCamera(device) ? 0.5 : 1.0
+        let customMaxZoom = attributes.maxZoomFactor.map { $0 / zoomMultiplier }
+        device.setZoomFactor(zoomFactor, customMaxZoom: customMaxZoom)
         device.unlockForConfiguration()
     }
 }

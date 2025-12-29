@@ -186,6 +186,21 @@ public extension MCamera {
     }
 
     /**
+     Sets the maximum zoom factor allowed for the camera.
+
+     - parameter maxZoomFactor: The maximum zoom factor. If `nil`, uses device's maximum zoom capability.
+     - note: This value will be clamped to the device's actual maximum zoom capability if it exceeds it.
+     */
+    func setMaxZoomFactor(_ maxZoomFactor: CGFloat?) -> Self {
+        let previousBlock = config.initialConfigurationBlock
+        config.initialConfigurationBlock = { manager in
+            previousBlock?(manager)
+            manager.attributes.maxZoomFactor = maxZoomFactor
+        }
+        return self
+    }
+
+    /**
      Changes the initial camera flash mode.
 
      For available options, please refer to the ``CameraFlashMode`` documentation.
@@ -387,6 +402,14 @@ public extension MCamera {
             previousBlock?(manager)
             manager.cameraMetalView.focusIndicator.size = size
         }
+        return self
+    }
+    
+    /**
+     Sets a callback that is triggered when the camera zoom factor changes via pinch gesture.
+     */
+    func onZoomChanged(_ action: @escaping (CGFloat) -> Void) -> Self {
+        config.onZoomChanged = action
         return self
     }
 }

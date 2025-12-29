@@ -63,6 +63,9 @@ extension CameraBridgeView.Coordinator {
         do {
             let desiredZoomFactor = parent.cameraManager.attributes.zoomFactor + atan2(pinch.velocity, 33)
             try parent.cameraManager.setCameraZoomFactor(desiredZoomFactor)
+            
+            // 通知外部缩放变化
+            parent.cameraManager.onZoomChanged?(parent.cameraManager.attributes.zoomFactor)
         } catch {}
     }}
 }
