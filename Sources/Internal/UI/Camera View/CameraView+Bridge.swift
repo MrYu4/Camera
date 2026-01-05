@@ -59,13 +59,18 @@ extension CameraBridgeView.Coordinator {
 
 // MARK: On Pinch
 extension CameraBridgeView.Coordinator {
-    @MainActor @objc func onPinchGesture(_ pinch: UIPinchGestureRecognizer) { if pinch.state == .changed {
-        do {
-            let desiredZoomFactor = parent.cameraManager.attributes.zoomFactor + atan2(pinch.velocity, 33)
-            try parent.cameraManager.setCameraZoomFactor(desiredZoomFactor)
-            
-            // 通知外部缩放变化
-            parent.cameraManager.onZoomChanged?(parent.cameraManager.attributes.zoomFactor)
-        } catch {}
-    }}
+    @MainActor @objc func onPinchGesture(_ pinch: UIPinchGestureRecognizer) {
+        // 禁止前置摄像头缩放
+        guard parent.cameraManager.attributes.cameraPosition == .back else { return }
+
+        if pinch.state == .changed {
+            do {
+                let desiredZoomFactor = parent.cameraManager.attributes.zoomFactor + atan2(pinch.velocity, 66)
+                try parent.cameraManager.setCameraZoomFactor(desiredZoomFactor)
+                
+                // 通知外部缩放变化
+                parent.cameraManager.onZoomChanged?(parent.cameraManager.attributes.zoomFactor)
+            } catch {}
+        }
+    }
 }
