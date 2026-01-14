@@ -15,6 +15,10 @@ import AVKit
 @MainActor public class CameraManager: NSObject, ObservableObject {
     @Published var attributes: CameraManagerAttributes = .init()
     var onZoomChanged: ((CGFloat) -> Void)?
+    var onFlashModeChanged: ((CameraFlashMode) -> Void)?
+
+    // MARK: Settings
+    public var shouldDisableFlashForFrontCamera: Bool = true
 
     // MARK: Input
     private(set) var captureSession: any CaptureSession

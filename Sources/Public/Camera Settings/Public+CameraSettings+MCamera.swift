@@ -217,6 +217,19 @@ public extension MCamera {
     }
 
     /**
+     Decides whether the flash should be disabled for the front camera.
+     - default: true
+     */
+    func setForceDisableFrontCameraFlash(_ value: Bool) -> Self {
+        let previousBlock = config.initialConfigurationBlock
+        config.initialConfigurationBlock = { manager in
+            previousBlock?(manager)
+            manager.shouldDisableFlashForFrontCamera = value
+        }
+        return self
+    }
+
+    /**
      Changes the initial light (torch / flashlight) mode.
 
      For available options, please refer to the ``CameraLightMode`` documentation.

@@ -47,7 +47,11 @@ private extension CameraManagerPhotoOutput {
     func getPhotoOutputSettings() -> AVCapturePhotoSettings {
         let settings = AVCapturePhotoSettings()
         if let parent = parent {
-            settings.flashMode = parent.attributes.flashMode.toDeviceFlashMode()
+            if parent.shouldDisableFlashForFrontCamera && parent.attributes.cameraPosition == .front {
+                settings.flashMode = .off
+            } else {
+                settings.flashMode = parent.attributes.flashMode.toDeviceFlashMode()
+            }
         }
         return settings
     }
