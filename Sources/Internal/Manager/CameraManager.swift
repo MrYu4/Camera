@@ -213,7 +213,6 @@ extension CameraManager {
         let apiZoomFactor = zoomFactor / zoomMultiplier
         
         guard apiZoomFactor != device.videoZoomFactor else { return }
-        guard !isChanging else { return }
 
         try setDeviceZoomFactor(apiZoomFactor, device)
         
@@ -437,7 +436,7 @@ extension CameraManager {
     var hasFlash: Bool { getCameraInput()?.device.hasFlash ?? false }
     var hasLight: Bool { getCameraInput()?.device.hasTorch ?? false }
 }
-private extension CameraManager {
+extension CameraManager {
     var isChanging: Bool { cameraMetalView.isAnimating }
 }
 

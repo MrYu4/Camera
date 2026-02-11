@@ -62,6 +62,8 @@ extension CameraBridgeView.Coordinator {
     @MainActor @objc func onPinchGesture(_ pinch: UIPinchGestureRecognizer) {
         // 禁止前置摄像头缩放
         guard parent.cameraManager.attributes.cameraPosition == .back else { return }
+        // 切换摄像头动画期间禁止手势缩放
+        guard !parent.cameraManager.isChanging else { return }
 
         if pinch.state == .changed {
             do {
