@@ -168,7 +168,7 @@ private class BrightnessControlView: UIView {
         super.touchesEnded(touches, with: event)
         
         // 重新安排淡出动画
-        if let focusView = metalView?.parent.cameraView.viewWithTag(.focusIndicatorTag) {
+        if let focusView = metalView?.parent?.cameraView.viewWithTag(.focusIndicatorTag) {
             metalView?.scheduleFadeOut(for: focusView)
         }
         metalView?.scheduleFadeOut(for: self)
@@ -178,7 +178,7 @@ private class BrightnessControlView: UIView {
         super.touchesCancelled(touches, with: event)
         
         // 重新安排淡出动画
-        if let focusView = metalView?.parent.cameraView.viewWithTag(.focusIndicatorTag) {
+        if let focusView = metalView?.parent?.cameraView.viewWithTag(.focusIndicatorTag) {
             metalView?.scheduleFadeOut(for: focusView)
         }
         metalView?.scheduleFadeOut(for: self)

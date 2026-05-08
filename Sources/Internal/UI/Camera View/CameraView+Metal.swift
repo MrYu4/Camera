@@ -14,9 +14,9 @@ import MetalKit
 import AVKit
 
 @MainActor class CameraMetalView: MTKView {
-    private(set) var parent: CameraManager!
-    private(set) var ciContext: CIContext!
-    private(set) var commandQueue: MTLCommandQueue!
+    private(set) var parent: CameraManager?
+    private(set) var ciContext: CIContext?
+    private(set) var commandQueue: MTLCommandQueue?
     private(set) var currentFrame: CIImage?
     private(set) var focusIndicator: CameraFocusIndicatorView = .init()
     private(set) var brightnessSlider: CameraBrightnessSliderView = .init()
@@ -40,7 +40,7 @@ private extension CameraMetalView {
         self.commandQueue = metalDevice.makeCommandQueue()
     }
     func configureMetalView(metalDevice: MTLDevice) {
-        self.parent.cameraView.alpha = 0
+        self.parent?.cameraView.alpha = 0
 
         self.delegate = self
         self.device = metalDevice
@@ -61,13 +61,14 @@ private extension CameraMetalView {
 // MARK: Camera Entrance
 extension CameraMetalView {
     func performCameraEntranceAnimation() { UIView.animate(withDuration: 0.33) { [self] in
-        parent.cameraView.alpha = 1
+        parent?.cameraView.alpha = 1
     }}
 }
 
 // MARK: Image Capture
 extension CameraMetalView {
     func performImageCaptureAnimation() {
+        guard let parent else { return }
         let blackMatte = createBlackMatte()
 
         parent.cameraView.addSubview(blackMatte)
@@ -76,6 +77,7 @@ extension CameraMetalView {
 }
 private extension CameraMetalView {
     func createBlackMatte() -> UIView {
+        guard let parent else { return UIView() }
         let view = UIView()
         view.frame = parent.cameraView.frame
         view.backgroundColor = .init(resource: .mijickBackgroundPrimary)
@@ -94,6 +96,7 @@ private extension CameraMetalView {
 // MARK: Camera Flip
 extension CameraMetalView {
     func beginCameraFlipAnimation() async {
+        guard let parent else { return }
         let snapshot = createSnapshot()
         isAnimating = true
         insertBlurView(snapshot)
@@ -102,7 +105,7 @@ extension CameraMetalView {
         await Task.sleep(seconds: 0.01)
     }
     func finishCameraFlipAnimation() async {
-        guard let blurView = parent.cameraView.viewWithTag(.blurViewTag) else { return }
+        guard let parent, let blurView = parent.cameraView.viewWithTag(.blurViewTag) else { return }
 
         await Task.sleep(seconds: 0.44)
         UIView.animate(withDuration: 0.3, animations: { blurView.alpha = 0 }) { [self] _ in
@@ -119,6 +122,7 @@ private extension CameraMetalView {
         return image
     }
     func insertBlurView(_ snapshot: UIImage?) {
+        guard let parent else { return }
         let blurView = UIImageView(frame: parent.cameraView.frame)
         blurView.image = snapshot
         blurView.contentMode = .scaleAspectFill
@@ -129,16 +133,18 @@ private extension CameraMetalView {
         parent.cameraView.addSubview(blurView)
     }
     func animateBlurFlip() {
+        guard let parent else { return }
         UIView.transition(with: parent.cameraView, duration: 0.44, options: cameraFlipAnimationTransition) {}
     }
 }
 private extension CameraMetalView {
-    var cameraFlipAnimationTransition: UIView.AnimationOptions { parent.attributes.cameraPosition == .back ? .transitionFlipFromLeft : .transitionFlipFromRight }
+    var cameraFlipAnimationTransition: UIView.AnimationOptions { parent?.attributes.cameraPosition == .back ? .transitionFlipFromLeft : .transitionFlipFromRight }
 }
 
 // MARK: Camera Focus
 extension CameraMetalView {
     func performCameraFocusAnimation(touchPoint: CGPoint) {
+        guard let parent else { return }
         removeExistingFocusIndicatorAnimations()
 
         let focusIndicator = focusIndicator.create(at: touchPoint)
@@ -167,6 +173,7 @@ extension CameraMetalView {
     }
     
     func cancelFadeOutAndKeepVisible() {
+        guard let parent else { return }
         // 取消所有淡出动画并恢复完全可见
         if let focusView = parent.cameraView.viewWithTag(.focusIndicatorTag) {
             focusView.layer.removeAllAnimations()
@@ -179,7 +186,8 @@ extension CameraMetalView {
     }
 }
 private extension CameraMetalView {
-    func removeExistingFocusIndicatorAnimations() { 
+    func removeExistingFocusIndicatorAnimations() {
+        guard let parent else { return }
         if let view = parent.cameraView.viewWithTag(.focusIndicatorTag) {
             view.removeFromSuperview()
         }
@@ -207,11 +215,11 @@ private extension CameraMetalView {
 // MARK: Camera Orientation
 extension CameraMetalView {
     func beginCameraOrientationAnimation(if shouldAnimate: Bool) async { if shouldAnimate {
-        parent.cameraView.alpha = 0
+        parent?.cameraView.alpha = 0
         await Task.sleep(seconds: 0.1)
     }}
     func finishCameraOrientationAnimation(if shouldAnimate: Bool) { if shouldAnimate {
-        UIView.animate(withDuration: 0.2, delay: 0.1) { self.parent.cameraView.alpha = 1 }
+        UIView.animate(withDuration: 0.2, delay: 0.1) { self.parent?.cameraView.alpha = 1 }
     }}
 }
 
@@ -233,10 +241,12 @@ extension CameraMetalView: @preconcurrency AVCaptureVideoDataOutputSampleBufferD
 private extension CameraMetalView {
     func captureCurrentFrame(_ cvImageBuffer: CVImageBuffer) -> CIImage {
         let currentFrame = CIImage(cvImageBuffer: cvImageBuffer)
+        guard let parent else { return currentFrame }
         return currentFrame.oriented(parent.attributes.frameOrientation)
     }
     func applyingFiltersToCurrentFrame(_ currentFrame: CIImage) -> CIImage {
-        currentFrame.applyingFilters(parent.attributes.cameraFilters)
+        guard let parent else { return currentFrame }
+        return currentFrame.applyingFilters(parent.attributes.cameraFilters)
     }
     func redrawCameraView(_ frame: CIImage) {
         currentFrame = frame
@@ -247,7 +257,8 @@ private extension CameraMetalView {
 // MARK: Draw
 extension CameraMetalView: MTKViewDelegate {
     func draw(in view: MTKView) {
-        guard let commandBuffer = commandQueue.makeCommandBuffer(),
+        guard let commandQueue,
+              let commandBuffer = commandQueue.makeCommandBuffer(),
               let ciImage = currentFrame,
               let currentDrawable = view.currentDrawable
         else { return }
@@ -262,7 +273,7 @@ private extension CameraMetalView {
     func changeDrawableSize(_ view: MTKView, _ ciImage: CIImage) {
         view.drawableSize = ciImage.extent.size
     }
-    func renderView(_ view: MTKView, _ currentDrawable: any CAMetalDrawable, _ commandBuffer: any MTLCommandBuffer, _ ciImage: CIImage) { ciContext.render(
+    func renderView(_ view: MTKView, _ currentDrawable: any CAMetalDrawable, _ commandBuffer: any MTLCommandBuffer, _ ciImage: CIImage) { ciContext?.render(
         ciImage,
         to: currentDrawable.texture,
         commandBuffer: commandBuffer,

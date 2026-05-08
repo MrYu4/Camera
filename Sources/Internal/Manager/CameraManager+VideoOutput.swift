@@ -74,7 +74,8 @@ private extension CameraManagerVideoOutput {
     func storeLastFrame() {
         guard let texture = parent.cameraMetalView.currentDrawable?.texture,
               let ciImage = CIImage(mtlTexture: texture, options: nil),
-              let cgImage = parent.cameraMetalView.ciContext.createCGImage(ciImage, from: ciImage.extent)
+              let ciContext = parent.cameraMetalView.ciContext,
+              let cgImage = ciContext.createCGImage(ciImage, from: ciImage.extent)
         else { return }
 
         firstRecordedFrame = UIImage(cgImage: cgImage, scale: 1.0, orientation: parent.attributes.deviceOrientation.toImageOrientation())
