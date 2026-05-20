@@ -230,15 +230,36 @@ extension CameraMetalView {
 
 // MARK: Capture
 extension CameraMetalView: @preconcurrency AVCaptureVideoDataOutputSampleBufferDelegate {
-    func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+    nonisolated func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+        let sampleBuffer = SendableSampleBuffer(sampleBuffer)
+
+        if Thread.isMainThread {
+            MainActor.assumeIsolated {
+                handleCaptureOutput(sampleBuffer.value)
+            }
+            return
+        }
+
+        Task { @MainActor [weak self, sampleBuffer] in
+            self?.handleCaptureOutput(sampleBuffer.value)
+        }
+    }
+}
+private struct SendableSampleBuffer: @unchecked Sendable {
+    let value: CMSampleBuffer
+
+    init(_ value: CMSampleBuffer) {
+        self.value = value
+    }
+}
+private extension CameraMetalView {
+    func handleCaptureOutput(_ sampleBuffer: CMSampleBuffer) {
         guard let cvImageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
 
         let currentFrame = captureCurrentFrame(cvImageBuffer)
         let currentFrameWithFiltersApplied = applyingFiltersToCurrentFrame(currentFrame)
         redrawCameraView(currentFrameWithFiltersApplied)
     }
-}
-private extension CameraMetalView {
     func captureCurrentFrame(_ cvImageBuffer: CVImageBuffer) -> CIImage {
         let currentFrame = CIImage(cvImageBuffer: cvImageBuffer)
         guard let parent else { return currentFrame }
