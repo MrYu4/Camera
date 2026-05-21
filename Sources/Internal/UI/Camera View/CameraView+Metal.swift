@@ -147,11 +147,15 @@ extension CameraMetalView {
         guard let parent else { return }
         removeExistingFocusIndicatorAnimations()
 
+        // 将当前设备方向传递给两个构建器，使 UI 随屏幕方向自动适配
+        focusIndicator.deviceOrientation = parent.attributes.deviceOrientation
+        brightnessSlider.deviceOrientation = parent.attributes.deviceOrientation
+
         let focusIndicator = focusIndicator.create(at: touchPoint)
         parent.cameraView.addSubview(focusIndicator)
         animateFocusIndicator(focusIndicator)
         
-        // 添加亮度滑块（紧贴对焦图标右侧）
+        // 添加亮度滑块（位置随屏幕方向适配）
         if brightnessSlider.enabled {
             let sliderView = brightnessSlider.create(at: touchPoint, focusIndicatorSize: self.focusIndicator.size, parent: parent, metalView: self)
             parent.cameraView.addSubview(sliderView)
@@ -165,10 +169,18 @@ extension CameraMetalView {
     func scheduleFadeOut(for view: UIView) {
         UIView.animate(withDuration: 0.44, delay: 1.44, animations: { 
             view.alpha = 0.2 
-        }) { _ in
+        }) { finished in
+            // 若动画被 removeAllAnimations() 中断，finished = false，
+            // 不启动 phase2，防止旧的动画链在旋转后继续触发，导致对焦框提前消失
+            guard finished else { return }
             UIView.animate(withDuration: 0.44, delay: 1.44, animations: { 
                 view.alpha = 0 
-            })
+            }) { finished in
+                guard finished else { return }
+                // 彻底移出视图层级，防止 alpha=0 的不可见视图（特别是 BrightnessControlView）
+                // 继续拦截触摸事件，导致后续点击无法触发对焦
+                view.removeFromSuperview()
+            }
         }
     }
     
@@ -196,7 +208,12 @@ private extension CameraMetalView {
         }
     }
     func animateFocusIndicator(_ focusIndicator: UIImageView) {
-        UIView.animate(withDuration: 0.44, delay: 0, usingSpringWithDamping: 0.6, initialSpringVelocity: 0, animations: { focusIndicator.transform = .init(scaleX: 1, y: 1) }) { _ in
+        // 动画目标：scale 恢复到 1 并叠加旋转角度，使图标对用户视角正立
+        let targetTransform = CGAffineTransform(rotationAngle: self.focusIndicator.rotationAngle)
+        UIView.animate(withDuration: 0.44, delay: 0, usingSpringWithDamping: 0.6, initialSpringVelocity: 0, animations: { focusIndicator.transform = targetTransform }) { finished in
+            // 若被 removeAllAnimations() 中断（旋转时），不在此处调度淡出；
+            // 由 updateFocusIndicatorOrientation 的旋转动画 completion 统一接管
+            guard finished else { return }
             self.scheduleFadeOut(for: focusIndicator)
         }
     }
@@ -223,6 +240,51 @@ extension CameraMetalView {
     }}
 }
 
+// MARK: Focus Indicator Orientation Update
+extension CameraMetalView {
+    /// 设备方向改变后调用：重置淡出计时 → 旋转对焦框 → 在新方向重建亮度滑块。
+    func updateFocusIndicatorOrientation(_ newOrientation: AVCaptureVideoOrientation) {
+        guard let parent else { return }
+
+        focusIndicator.deviceOrientation = newOrientation
+        brightnessSlider.deviceOrientation = newOrientation
+
+        // ── 对焦框 ──────────────────────────────────────────────────────────
+        // 1. 取消旋转前排队的淡出动画，让对焦框保持完全可见
+        // 2. 动画旋转到新方向
+        // 3. 旋转完成后重新排队淡出（给用户新的完整交互窗口）
+        if let focusView = parent.cameraView.viewWithTag(.focusIndicatorTag) {
+            focusView.layer.removeAllAnimations()
+            focusView.alpha = 1.0
+            let angle = focusIndicator.rotationAngle
+            UIView.animate(withDuration: 0.3, delay: 0, options: .beginFromCurrentState, animations: {
+                focusView.transform = CGAffineTransform(rotationAngle: angle)
+            }, completion: { _ in
+                self.scheduleFadeOut(for: focusView)
+            })
+        }
+
+        // ── 亮度滑块 ────────────────────────────────────────────────────────
+        // 位置和尺寸都依赖方向，移除旧的，以对焦框中心为触摸点重建新的
+        let hadSlider = parent.cameraView.viewWithTag(.brightnessSliderTag) != nil
+        parent.cameraView.viewWithTag(.brightnessSliderTag)?.removeFromSuperview()
+
+        if hadSlider, let focusView = parent.cameraView.viewWithTag(.focusIndicatorTag) {
+            let touchPoint = focusView.center
+            let newSlider = brightnessSlider.create(
+                at: touchPoint,
+                focusIndicatorSize: focusIndicator.size,
+                parent: parent,
+                metalView: self
+            )
+            parent.cameraView.addSubview(newSlider)
+            animateBrightnessSlider(newSlider)
+            // 与 performCameraFocusAnimation 保持一致：重建时同步重置相机曝光
+            try? parent.setExposureTargetBias(0)
+        }
+    }
+}
+
 
 // MARK: - CAPTURING FRAMES
 
@@ -232,14 +294,10 @@ extension CameraMetalView {
 extension CameraMetalView: @preconcurrency AVCaptureVideoDataOutputSampleBufferDelegate {
     nonisolated func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
         let sampleBuffer = SendableSampleBuffer(sampleBuffer)
-
-        if Thread.isMainThread {
-            MainActor.assumeIsolated {
-                handleCaptureOutput(sampleBuffer.value)
-            }
-            return
-        }
-
+        // 始终通过 Task { @MainActor } 跳到主 actor，不依赖 Thread.isMainThread。
+        // Thread.isMainThread 检查的是底层 POSIX 线程，而 MainActor.assumeIsolated
+        // 使用 Swift Concurrency executor 校验，两者可能不一致，
+        // AVFoundation delegate 回调即使在主线程也可能触发 precondition crash。
         Task { @MainActor [weak self, sampleBuffer] in
             self?.handleCaptureOutput(sampleBuffer.value)
         }
