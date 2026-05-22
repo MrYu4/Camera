@@ -67,18 +67,23 @@ private extension CameraManagerPhotoOutput {
 
 // MARK: Receive Data
 extension CameraManagerPhotoOutput: @preconcurrency AVCapturePhotoCaptureDelegate {
-    func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: (any Error)?) {
-        guard let parent = parent,
-              let imageData = photo.fileDataRepresentation(),
+    // AVFoundation 在后台线程调用此回调，必须标记 nonisolated，
+    // 所有 @MainActor 状态的读写需显式跳回主线程。
+    nonisolated func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: (any Error)?) {
+        guard let imageData = photo.fileDataRepresentation(),
               let ciImage = CIImage(data: imageData)
         else { return }
 
-        let capturedCIImage = prepareCIImage(ciImage, parent.attributes.cameraFilters)
-        let capturedCGImage = prepareCGImage(capturedCIImage)
-        let capturedUIImage = prepareUIImage(capturedCGImage)
-        let capturedMedia = MCameraMedia(data: capturedUIImage)
+        Task { @MainActor [weak self] in
+            guard let self, let parent = self.parent else { return }
 
-        parent.setCapturedMedia(capturedMedia)
+            let capturedCIImage = self.prepareCIImage(ciImage, parent.attributes.cameraFilters)
+            let capturedCGImage = self.prepareCGImage(capturedCIImage)
+            let capturedUIImage = self.prepareUIImage(capturedCGImage)
+            let capturedMedia = MCameraMedia(data: capturedUIImage)
+
+            parent.setCapturedMedia(capturedMedia)
+        }
     }
 }
 private extension CameraManagerPhotoOutput {

@@ -22,7 +22,9 @@ extension CameraManagerMotionManager {
     func setup(parent: CameraManager) {
         self.parent = parent
         manager.accelerometerUpdateInterval = 0.05
-        manager.startAccelerometerUpdates(to: .current ?? .init(), withHandler: handleAccelerometerUpdates)
+        // OperationQueue.current 在主线程外部（非 Operation.main() 内）返回 nil，
+        // 使用 .main 确保回调始终在主线程执行，避免 @MainActor 状态的数据竞争。
+        manager.startAccelerometerUpdates(to: .main, withHandler: handleAccelerometerUpdates)
     }
 }
 private extension CameraManagerMotionManager {

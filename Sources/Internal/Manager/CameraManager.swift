@@ -93,7 +93,10 @@ private extension CameraManager {
     }
     func setupFrameRecorder() throws(MCameraError) {
         let captureVideoOutput = AVCaptureVideoDataOutput()
-        captureVideoOutput.setSampleBufferDelegate(cameraMetalView, queue: .main)
+        // 使用独立后台队列接收帧数据，避免在主线程投递 30~60fps 的 sample buffer。
+        // CameraMetalView.captureOutput 内部已通过 Task { @MainActor } 跳回主线程。
+        let frameQueue = DispatchQueue(label: "com.mijick.camera.frameRecorder", qos: .userInteractive)
+        captureVideoOutput.setSampleBufferDelegate(cameraMetalView, queue: frameQueue)
 
         try captureSession.add(output: captureVideoOutput)
     }
