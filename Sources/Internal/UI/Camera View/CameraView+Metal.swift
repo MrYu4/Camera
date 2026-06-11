@@ -151,6 +151,9 @@ extension CameraMetalView {
         focusIndicator.deviceOrientation = parent.attributes.deviceOrientation
         brightnessSlider.deviceOrientation = parent.attributes.deviceOrientation
 
+        // 让 cameraView 裁剪超出预览区域的子视图（对焦框/亮度滑块在边缘时只显示能看见的部分）
+        parent.cameraView.clipsToBounds = true
+
         let focusIndicator = focusIndicator.create(at: touchPoint)
         parent.cameraView.addSubview(focusIndicator)
         animateFocusIndicator(focusIndicator)
@@ -165,7 +168,7 @@ extension CameraMetalView {
             try? parent.setExposureTargetBias(0)
         }
     }
-    
+
     func scheduleFadeOut(for view: UIView) {
         UIView.animate(withDuration: 0.44, delay: 1.44, animations: { 
             view.alpha = 0.2 
@@ -352,13 +355,16 @@ private extension CameraMetalView {
     func changeDrawableSize(_ view: MTKView, _ ciImage: CIImage) {
         view.drawableSize = ciImage.extent.size
     }
-    func renderView(_ view: MTKView, _ currentDrawable: any CAMetalDrawable, _ commandBuffer: any MTLCommandBuffer, _ ciImage: CIImage) { ciContext?.render(
-        ciImage,
-        to: currentDrawable.texture,
-        commandBuffer: commandBuffer,
-        bounds: .init(origin: .zero, size: view.drawableSize),
-        colorSpace: CGColorSpaceCreateDeviceRGB()
-    )}
+    func renderView(_ view: MTKView, _ currentDrawable: any CAMetalDrawable, _ commandBuffer: any MTLCommandBuffer, _ ciImage: CIImage) {
+        // 使用非阻塞的 startTask(toRender:to:) 代替同步的 render(_:to:commandBuffer:bounds:colorSpace:)。
+        // 同步版本内部会在主线程执行 dispatch_async + dispatch_group_wait，
+        // 导致 QoS 继承追踪（qosWaiterSignallerInvariantCheck）崩溃。
+        // startTask 仅将 GPU 命令编码进 commandBuffer，立即返回，
+        // 实际渲染由后续的 commandBuffer.commit() 异步交给 GPU 完成。
+        let destination = CIRenderDestination(mtlTexture: currentDrawable.texture, commandBuffer: commandBuffer)
+        destination.colorSpace = CGColorSpaceCreateDeviceRGB()
+        try? ciContext?.startTask(toRender: ciImage, to: destination)
+    }
     func commitBuffer(_ currentDrawable: any CAMetalDrawable, _ commandBuffer: any MTLCommandBuffer) {
         commandBuffer.present(currentDrawable)
         commandBuffer.commit()
